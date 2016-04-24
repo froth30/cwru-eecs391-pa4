@@ -169,7 +169,7 @@ public class RLAgent extends Agent {
         calculateRewards(stateView, historyView);
         if (significantEvent(stateView, historyView)){
             for (Integer id : myFootmen){
-                int enemy = selectAction(stateView, historyView, id);
+                Integer enemy = selectAction(stateView, historyView, id);
                 if (!frozen) calcNewWeights(stateView, historyView, id, enemy);
                 actions.put(id, Action.createCompoundAttack(id, enemy));
             }
@@ -180,7 +180,7 @@ public class RLAgent extends Agent {
 
     private void removeDeadUnits(State.StateView stateView, History.HistoryView historyView){
         for (DeathLog deathLog : historyView.getDeathLogs(stateView.getTurnNumber() - 1)){
-            int owner = deathLog.getController();
+            Integer owner = deathLog.getController();
             Integer deadUnit = deathLog.getDeadUnitID();
             if (owner == playernum && myFootmen.contains(deadUnit)){
                 myFootmen.remove(deadUnit);
@@ -220,7 +220,7 @@ public class RLAgent extends Agent {
         if (myFootmen.size() > enemyFootmen.size()){
             System.out.println("VICTORY!");
         } else {
-            //System.out.println("DEFEAT");
+            System.out.println("DEFEAT");
         }
     }
 
@@ -245,8 +245,7 @@ public class RLAgent extends Agent {
             frozen = false;
             testingEdpisodes = 0;
             averageRewards.add(averageReward / 5.0);
-            //printTestData(averageRewards);
-            System.out.println(averageRewards.size());
+            printTestData(averageRewards);
             averageReward = 0.0;
         }
     }
@@ -303,11 +302,11 @@ public class RLAgent extends Agent {
         if (stateView.getTurnNumber() == 0)
             return enemyFootmen.get((int) random.nextDouble() * enemyFootmen.size());  //TODO used to just typecast rand to int
 
-        int defenderId = enemyFootmen.get(0);
+        Integer defenderId = enemyFootmen.get(0);
 
         if (frozen && random.nextDouble() < epsilon) {
             for (int i = 0; i < enemyFootmen.size(); i++) {
-                int tempDefenderId = enemyFootmen.get(i);
+                Integer tempDefenderId = enemyFootmen.get(i);
                 double tempTotalQ = calcQValue(stateView, historyView, attackerId, defenderId);
                 if (tempTotalQ > totalQ)
                     defenderId = tempDefenderId;
@@ -316,7 +315,7 @@ public class RLAgent extends Agent {
         }
 
         for (int i = 0; i < enemyFootmen.size(); i++) {
-            int tempDefenderId = enemyFootmen.get(i);
+            Integer tempDefenderId = enemyFootmen.get(i);
             double tempTotalQ = calcQValue(stateView, historyView, attackerId, defenderId);
             if (tempTotalQ > totalQ) {
                 totalQ = tempTotalQ;
@@ -375,7 +374,7 @@ public class RLAgent extends Agent {
         }
 
         for (DeathLog deathLog : historyView.getDeathLogs(previousTurnNumber)) {
-            int deadFootmanId = deathLog.getDeadUnitID();
+            Integer deadFootmanId = deathLog.getDeadUnitID();
             if (deathLog.getController() == ENEMY_PLAYERNUM) {
                 for (ActionResult ar : historyView.getCommandFeedback(playernum, previousTurnNumber).values()) {
                     if (ar.getAction().getUnitId() == footmanId &&
