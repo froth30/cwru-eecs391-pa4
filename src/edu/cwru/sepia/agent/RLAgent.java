@@ -216,7 +216,6 @@ public class RLAgent extends Agent {
     public void terminalStep(State.StateView stateView, History.HistoryView historyView) {
         calculateRewards(stateView, historyView);
         removeDeadUnits(stateView, historyView);
-        episodeNumber++;
         decideToLearn();
         decideToTest();
         if (episodeNumber > numEpisodes){
@@ -227,6 +226,7 @@ public class RLAgent extends Agent {
 
     private void decideToLearn(){
         if (!shouldFreeze && learningEdpisodes < 10){
+            episodeNumber++;
             learningEdpisodes++;
         } else if (!shouldFreeze) {
             shouldFreeze = true;
@@ -237,11 +237,14 @@ public class RLAgent extends Agent {
     private void decideToTest(){
         if (shouldFreeze && testingEdpisodes < 5) {
             testingEdpisodes++;
-            double totalReward = rewards.values().stream()
-                    .mapToDouble(reward -> reward).sum();
+            double totalReward = 0;
+            for (Double reward : rewards.values()){
+                totalReward += reward;
+            }
             testingReward += (totalReward / rewards.size());
         } else  if (shouldFreeze){
             shouldFreeze = false;
+            testingEdpisodes = 0;
             averageRewards.add(testingReward / NUM_FEATURES);
             printTestData(averageRewards);
             testingReward = 0;
@@ -277,7 +280,7 @@ public class RLAgent extends Agent {
 
     private double getNextWeight(double totalReward, double q, double feature) {
         double targetQ = totalReward + (gamma * totalQ);
-        double loss = -(targetQ - q) * feature;
+        double loss = -1 * (targetQ - q) * feature;
         return  feature - (learningRate * loss);
     }
 
