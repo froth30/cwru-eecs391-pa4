@@ -1,6 +1,8 @@
 package edu.cwru.sepia.agent;
 
 import edu.cwru.sepia.action.*;
+import edu.cwru.sepia.action.Action;
+import edu.cwru.sepia.action.ActionResult;
 import edu.cwru.sepia.environment.model.history.DamageLog;
 import edu.cwru.sepia.environment.model.history.DeathLog;
 import edu.cwru.sepia.environment.model.history.History;
@@ -38,6 +40,7 @@ public class RLAgent extends Agent {
      * Set this to whatever size your feature vector is.
      */
     public static final int NUM_FEATURES = 5;
+    private Map<Integer, Double> rewards;
 
     /** Use this random number generator for your epsilon exploration. When you submit we will
      * change this seed so make sure that your agent works for more than the default seed.
@@ -60,6 +63,7 @@ public class RLAgent extends Agent {
 
     public RLAgent(int playernum, String[] args) {
         super(playernum);
+        rewards = new HashMap<>();
 
         if (args.length >= 1) {
             numEpisodes = Integer.parseInt(args[0]);
@@ -152,7 +156,32 @@ public class RLAgent extends Agent {
      */
     @Override
     public Map<Integer, Action> middleStep(State.StateView stateView, History.HistoryView historyView) {
-        return null;
+        Map<Integer, Action> actions = new HashMap<Integer, Action>();
+        calculateRewards(stateView, historyView);
+        for (EventType type : EventType.values()){
+            for (Integer id : myFootmen){
+                switch (type){
+                    case NO_EVENT:
+                        //do nothing
+                        break;
+                    default:
+                        int enemy = selectAction(stateView, historyView, id);
+                        updateWeights(
+                                weights,
+                                calculateFeatureVector(
+                                        stateView,
+                                        historyView,
+                                        id,
+                                        enemy),
+                                rewards.get(id),
+                                stateView,
+                                historyView,
+                                id);
+                        actions.put(id, Action.createCompoundAttack(id, enemy));
+                }
+            }
+        }
+        return actions;
     }
 
     /**
@@ -181,7 +210,7 @@ public class RLAgent extends Agent {
      * @param footmanId The footman we are updating the weights for
      * @return The updated weight vector.
      */
-    public double[] updateWeights(double[] oldWeights, double[] oldFeatures, double totalReward, State.StateView stateView, History.HistoryView historyView, int footmanId) {
+    public double[] updateWeights(Double[] oldWeights, double[] oldFeatures, double totalReward, State.StateView stateView, History.HistoryView historyView, int footmanId) {
         return null;
     }
 
@@ -235,6 +264,12 @@ public class RLAgent extends Agent {
         return 0;
     }
 
+    private void calculateRewards(State.StateView stateView, History.HistoryView historyView){
+        for (Integer id : myFootmen){
+            rewards.put(id, rewards.get(id) + calculateReward(stateView, historyView, id));
+        }
+    }
+
     /**
      * Calculate the Q-Value for a given state action pair. The state in this scenario is the current
      * state view and the history of this episode. The action is the attacker and the enemy pair for the
@@ -250,7 +285,13 @@ public class RLAgent extends Agent {
      * @return The approximate Q-value
      */
     public double calcQValue(State.StateView stateView, History.HistoryView historyView, int attackerId, int defenderId) {
-        return 0;
+
+        double[] features = calculateFeatureVector(stateView, historyView, attackerId, defenderId);
+        double q = 0;
+        for (int i = 0; i < features.length; i++) {
+            q += features[i] * weights[i];
+        }
+        return q;
     }
 
     /**
@@ -308,6 +349,30 @@ public class RLAgent extends Agent {
         featureVector[4] = numAttackers > 0 ? 1.0 / numAttackers : 1;  //TODO look into different computation
 
         return featureVector;
+    }
+
+    private EventType eventHappened(int previousTurnNumber, History.HistoryView historyView){
+        final EventType[] event = {EventType.NO_EVENT};
+        if (previousTurnNumber >= 0){
+            event[0] = EventType.FIRST_TURN;
+        }
+        for (DamageLog damageLog : historyView.getDamageLogs(previousTurnNumber)){
+            myFootmen.stream()
+                    .filter(id -> id == damageLog.getDefenderID())
+                    .forEach(id -> event[0] = EventType.FOOTMAN_HIT);
+        }
+        for (DeathLog deathLog : historyView.getDeathLogs(previousTurnNumber)){
+            myFootmen.stream()
+                    .filter(id -> deathLog.getDeadUnitID() == id)
+                    .forEach(id -> event[0] = EventType.FOOTMAN_DIED);
+        }
+        for (ActionResult result : historyView.getCommandFeedback(playernum, previousTurnNumber).values()){
+            myFootmen.stream()
+                    .filter(id -> result.getAction().getUnitId() == id &&
+                            result.getFeedback().toString().equals("INCOMPLETE"))
+                    .forEach(id -> event[0] = EventType.ACTION_COMPLETED);
+        }
+        return event[0];
     }
 
     /**
