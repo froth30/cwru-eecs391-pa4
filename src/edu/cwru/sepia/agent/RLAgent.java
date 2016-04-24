@@ -19,7 +19,7 @@ public class RLAgent extends Agent {
     /**
      * Set in the constructor. Defines how many learning episodes your agent should run for.
      * When starting an episode. If the count is greater than this value print a message
-     * and call sys.exit(0)
+     * and call sys.exit(0.0)
      */
     public final int numEpisodes;
 
@@ -29,11 +29,11 @@ public class RLAgent extends Agent {
     private List<Integer> myFootmen;
     private List<Integer> enemyFootmen;
     private List<Integer> deadEnemyFootmen;
-    private boolean shouldFreeze;
-    private double totalQ;
-    private int learningEdpisodes;
-    private int testingEdpisodes;
-    private double testingReward;
+    private boolean frozen = false;
+    private double totalQ = 0.0;
+    private int learningEdpisodes = 0;
+    private int testingEdpisodes = 0;
+    private double averageReward;
     private List<Double> averageRewards;
     private int episodeNumber;
 
@@ -110,11 +110,17 @@ public class RLAgent extends Agent {
         myFootmen = new LinkedList<>();
         enemyFootmen = new LinkedList<>();
         deadEnemyFootmen = new LinkedList<>();  //TODO consider using an ArrayList
+
+        decideToLearn();
+        decideToTest();
+
         intializeFootmen(stateView, myFootmen, playernum);
         intializeFootmen(stateView, enemyFootmen, ENEMY_PLAYERNUM);
+
         for (Integer footman : myFootmen){
             rewards.put(footman, 0.0);
         }
+
         return middleStep(stateView, historyView);
     }
 
@@ -164,21 +170,21 @@ public class RLAgent extends Agent {
         if (significantEvent(stateView, historyView)){
             for (Integer id : myFootmen){
                 int enemy = selectAction(stateView, historyView, id);
-                if (!shouldFreeze) calcNewWeights(stateView, historyView, id, enemy);
+                if (!frozen) calcNewWeights(stateView, historyView, id, enemy);
                 actions.put(id, Action.createCompoundAttack(id, enemy));
             }
         }
-        if (stateView.getTurnNumber() > 0) removeDeadUnits(stateView, historyView);
+        if (stateView.getTurnNumber() > 0.0) removeDeadUnits(stateView, historyView);
         return actions;
     }
 
     private void removeDeadUnits(State.StateView stateView, History.HistoryView historyView){
         for (DeathLog deathLog : historyView.getDeathLogs(stateView.getTurnNumber() - 1)){
             int owner = deathLog.getController();
-            int deadUnit = deathLog.getDeadUnitID();
-            if (owner == playernum){
-                myFootmen.removeIf(footman -> footman.equals(deadUnit));
-            } else if (owner == ENEMY_PLAYERNUM){
+            Integer deadUnit = deathLog.getDeadUnitID();
+            if (owner == playernum && myFootmen.contains(deadUnit)){
+                myFootmen.remove(deadUnit);
+            } else if (owner == ENEMY_PLAYERNUM && enemyFootmen.contains(deadUnit)){
                 enemyFootmen.remove(deadUnit);
             }
         }
@@ -205,38 +211,43 @@ public class RLAgent extends Agent {
     public void terminalStep(State.StateView stateView, History.HistoryView historyView) {
         calculateRewards(stateView, historyView);
         removeDeadUnits(stateView, historyView);
-        decideToLearn();
-        decideToTest();
+        episodeNumber++;
         if (episodeNumber > numEpisodes){
+            System.out.println("ALL DONE");
             System.exit(0);
         }
         saveWeights(weights);
+        if (myFootmen.size() > enemyFootmen.size()){
+            System.out.println("VICTORY!");
+        } else {
+            //System.out.println("DEFEAT");
+        }
     }
 
     private void decideToLearn(){
-        if (!shouldFreeze && learningEdpisodes < 10){
-            episodeNumber++;
+        if (!frozen && learningEdpisodes < 10){
             learningEdpisodes++;
-        } else if (!shouldFreeze) {
-            shouldFreeze = true;
+        } else if (!frozen) {
+            frozen = true;
             learningEdpisodes = 0;
         }
     }
 
     private void decideToTest(){
-        if (shouldFreeze && testingEdpisodes < 5) {
+        if (frozen && testingEdpisodes < 5) {
             testingEdpisodes++;
-            double totalReward = 0;
+            double totalReward = 0.0;
             for (Double reward : rewards.values()){
                 totalReward += reward;
             }
-            testingReward += (totalReward /= rewards.size());
-        } else  if (shouldFreeze){
-            shouldFreeze = false;
+            averageReward += (totalReward / rewards.size());
+        } else  if (frozen){
+            frozen = false;
             testingEdpisodes = 0;
-            averageRewards.add(testingReward / NUM_FEATURES);
-            printTestData(averageRewards);
-            testingReward = 0;
+            averageRewards.add(averageReward / 5.0);
+            //printTestData(averageRewards);
+            System.out.println(averageRewards.size());
+            averageReward = 0.0;
         }
     }
 
@@ -254,11 +265,11 @@ public class RLAgent extends Agent {
                                   double totalReward, State.StateView stateView, History.HistoryView historyView, int footmanId) {
         double[] newWeights = new double[oldWeights.length];
         for (int i = 0; i < newWeights.length; i++) {
-            double q = 0;
+            double q = 0.0;
             for (int j = 0; j < oldFeatures.length; j++) {
                 q += oldWeights[j] * oldFeatures[j];
             }
-            if (!shouldFreeze) {
+            if (!frozen) {
                 for (Integer id : enemyFootmen) {
                     double totalQ = calcQValue(stateView, historyView, footmanId, id);
                     if (totalQ > this.totalQ) this.totalQ = totalQ;
@@ -270,9 +281,9 @@ public class RLAgent extends Agent {
     }
 
     private double getNextWeight(double totalReward, double q, double feature) {
-        double targetQ = totalReward + (gamma * totalQ);
+        double targetQ = totalReward + gamma * totalQ;
         double loss = -1 * (targetQ - q) * feature;
-        return  feature - (learningRate * loss);
+        return  feature - learningRate * loss;
     }
 
     /**
@@ -294,7 +305,7 @@ public class RLAgent extends Agent {
 
         int defenderId = enemyFootmen.get(0);
 
-        if (shouldFreeze && random.nextDouble() < epsilon) {
+        if (frozen && random.nextDouble() < epsilon) {
             for (int i = 0; i < enemyFootmen.size(); i++) {
                 int tempDefenderId = enemyFootmen.get(i);
                 double tempTotalQ = calcQValue(stateView, historyView, attackerId, defenderId);
@@ -350,7 +361,7 @@ public class RLAgent extends Agent {
      */
     public double calculateReward(State.StateView stateView, History.HistoryView historyView, int footmanId) {
 
-        double reward = 0;
+        double reward = 0.0;
         int previousTurnNumber = stateView.getTurnNumber() - 1;
 
         if (previousTurnNumber == -1)
@@ -359,7 +370,7 @@ public class RLAgent extends Agent {
         for (DamageLog damageLog : historyView.getDamageLogs(previousTurnNumber)) {
             if (damageLog.getAttackerID() == footmanId)
                 reward += damageLog.getDamage();
-            else if (damageLog.getDefenderController() == footmanId)  //TODO used to be getDefenderController()
+            else if (damageLog.getDefenderID() == footmanId)  //TODO used to be getDefenderController()
                 reward -= damageLog.getDamage();
         }
 
@@ -374,7 +385,7 @@ public class RLAgent extends Agent {
                         reward += 100;
                     }
                 }
-            } else reward -= (footmanId == deadFootmanId) ? 100 : 0;
+            } else reward -= (footmanId == deadFootmanId) ? 100 : 0.0;
         }
 
         if (historyView.getCommandsIssued(playernum, previousTurnNumber).containsKey(footmanId))
@@ -385,7 +396,9 @@ public class RLAgent extends Agent {
 
     private void calculateRewards(State.StateView stateView, History.HistoryView historyView){
         for (Integer id : myFootmen){
-            rewards.put(id, rewards.get(id) + calculateReward(stateView, historyView, id));
+            double stateReward = calculateReward(stateView, historyView, id);
+            double currentReward = rewards.get(id);
+            rewards.put(id, stateReward + currentReward);
         }
     }
 
@@ -406,11 +419,11 @@ public class RLAgent extends Agent {
     public double calcQValue(State.StateView stateView, History.HistoryView historyView, int attackerId, int defenderId) {
 
         double[] features = calculateFeatureVector(stateView, historyView, attackerId, defenderId);
-        double q = 0;
+        double q = 0.0;
         for (int i = 0; i < features.length; i++) {
             q += features[i] * weights[i];
         }
-        return q + weights[0];
+        return q;
     }
 
     /**
@@ -421,7 +434,7 @@ public class RLAgent extends Agent {
      * take a dot product of this array with the weights array to get a Q-value for a given state action.
      *
      * It is a good idea to make the first value in your array a constant. This just helps remove any offset
-     * from 0 in the Q-function. The other features are up to you. Many are suggested in the assignment
+     * from 0.0 in the Q-function. The other features are up to you. Many are suggested in the assignment
      * description.
      *
      * @param stateView Current state of the SEPIA game
@@ -436,36 +449,38 @@ public class RLAgent extends Agent {
         Unit.UnitView attacker = stateView.getUnit(attackerId);  // get attacker unit view
         Unit.UnitView defender = stateView.getUnit(defenderId);  // get defender unit view
 
+        featureVector[0] = 0.5;  // initialize first feature to constant
+
         if (attacker == null || defender == null)
             return featureVector;
 
-        featureVector[0] = 0.5;  // initialize first feature to constant
 
         featureVector[1] = 100 * (1 / chebyshevDistance(
                 attacker.getXPosition(), attacker.getYPosition(),
                 defender.getXPosition(), defender.getYPosition()));
 
-        featureVector[2] = defender.getHP() > 0 ? /*TODO (double)*/ attacker.getHP() / defender.getHP() : 1;  //TODO look into HPf-HPe instead of quotient
+        featureVector[2] = defender.getHP() > 0.0 ? /*TODO (double)*/ attacker.getHP() / defender.getHP() : 1;  //TODO look into HPf-HPe instead of quotient
 
         Map<Integer, ActionResult> actionResults = historyView
                 .getCommandFeedback(playernum, stateView.getTurnNumber() - 1);
 
-        if (actionResults == null)
-            return featureVector;
-
-        featureVector[3] = 1;  // initialize fourth feature to default value
-        if (actionResults.containsKey(defenderId)) {  //TODO are attacker and defender supposed to be swapped?
-            TargetedAction targetedAction = (TargetedAction) actionResults.get(defenderId).getAction();  //TODO change to Attack object?
-            if (targetedAction != null && targetedAction.getTargetId() == attackerId)
-                featureVector[3] = 100;
-        }
+       if (actionResults != null){
+           if (actionResults.containsKey(defenderId)){
+               TargetedAction action = (TargetedAction) actionResults.get(defenderId).getAction();
+               if (action != null && action.getTargetId() == attackerId){
+                   featureVector[3] = 100;
+               } else {
+                   featureVector[3] = 1;
+               }
+           }
+       }
 
         int numAttackers = 0;
         for (ActionResult ar : actionResults.values()) {
             if (((TargetedAction) ar.getAction()).getTargetId() == defenderId)
                 numAttackers++;
         }
-        featureVector[4] = numAttackers > 0 ? 1.0 / numAttackers : 1;  //TODO look into different computation
+        featureVector[4] = numAttackers > 0.0 ? 1.0 / numAttackers : 1;  //TODO look into different computation
 
         return featureVector;
     }
@@ -474,10 +489,10 @@ public class RLAgent extends Agent {
     private boolean significantEvent(State.StateView stateView, History.HistoryView historyView) {
 
         int lastTurnNumber = stateView.getTurnNumber() - 1;
-        if (lastTurnNumber < 0) {
+        if (lastTurnNumber < 0.0) {
             return true;
         }
-        if (historyView.getDeathLogs(lastTurnNumber).size() > 0) {
+        if (historyView.getDeathLogs(lastTurnNumber).size() > 0.0) {
 
             return true;
         }
