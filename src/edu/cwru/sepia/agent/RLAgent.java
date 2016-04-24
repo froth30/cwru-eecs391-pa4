@@ -211,7 +211,6 @@ public class RLAgent extends Agent {
     public void terminalStep(State.StateView stateView, History.HistoryView historyView) {
         calculateRewards(stateView, historyView);
         removeDeadUnits(stateView, historyView);
-        episodeNumber++;
         if (episodeNumber > numEpisodes){
             System.out.println("ALL DONE");
             System.exit(0);
@@ -226,6 +225,8 @@ public class RLAgent extends Agent {
 
     private void decideToLearn(){
         if (!frozen && learningEdpisodes < 10){
+            episodeNumber++;
+            System.out.println(episodeNumber);
             learningEdpisodes++;
         } else if (!frozen) {
             frozen = true;
@@ -312,7 +313,7 @@ public class RLAgent extends Agent {
                     defenderId = tempDefenderId;
             }
             return defenderId;
-        }
+        } else
 
         for (int i = 0; i < enemyFootmen.size(); i++) {
             Integer tempDefenderId = enemyFootmen.get(i);
@@ -375,16 +376,11 @@ public class RLAgent extends Agent {
 
         for (DeathLog deathLog : historyView.getDeathLogs(previousTurnNumber)) {
             Integer deadFootmanId = deathLog.getDeadUnitID();
-            if (deathLog.getController() == ENEMY_PLAYERNUM) {
-                for (ActionResult ar : historyView.getCommandFeedback(playernum, previousTurnNumber).values()) {
-                    if (ar.getAction().getUnitId() == footmanId &&
-                            ((TargetedAction) ar.getAction()).getTargetId() == deadFootmanId &&
-                            !deadEnemyFootmen.contains(deadFootmanId)) {
-                        deadEnemyFootmen.add(deadFootmanId);
-                        reward += 100;
-                    }
-                }
-            } else reward -= (footmanId == deadFootmanId) ? 100 : 0.0;
+            if (myFootmen.contains(deadFootmanId)){
+                reward -= 100;
+            } else if (enemyFootmen.contains(deadFootmanId)){
+                reward += 100;
+            }
         }
 
         if (historyView.getCommandsIssued(playernum, previousTurnNumber).containsKey(footmanId))
