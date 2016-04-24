@@ -230,7 +230,7 @@ public class RLAgent extends Agent {
             for (Double reward : rewards.values()){
                 totalReward += reward;
             }
-            testingReward += (totalReward / rewards.size());
+            testingReward += (totalReward /= rewards.size());
         } else  if (shouldFreeze){
             shouldFreeze = false;
             testingEdpisodes = 0;
