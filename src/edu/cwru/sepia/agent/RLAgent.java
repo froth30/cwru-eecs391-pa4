@@ -28,7 +28,6 @@ public class RLAgent extends Agent {
      */
     private List<Integer> myFootmen;
     private List<Integer> enemyFootmen;
-    private List<Integer> deadEnemyFootmen;
     private boolean frozen = false;
     private double totalQ = 0.0;
     private int learningEdpisodes = 0;
@@ -109,7 +108,6 @@ public class RLAgent extends Agent {
 
         myFootmen = new LinkedList<>();
         enemyFootmen = new LinkedList<>();
-        deadEnemyFootmen = new LinkedList<>();  //TODO consider using an ArrayList
 
         decideToLearn();
         decideToTest();
@@ -167,7 +165,7 @@ public class RLAgent extends Agent {
     public Map<Integer, Action> middleStep(State.StateView stateView, History.HistoryView historyView) {
         Map<Integer, Action> actions = new HashMap<>();
         calculateRewards(stateView, historyView);
-        if (significantEvent(stateView, historyView)){
+        if (checkForEvent(stateView, historyView)){
             for (Integer id : myFootmen){
                 Integer enemy = selectAction(stateView, historyView, id);
                 if (!frozen) calcNewWeights(stateView, historyView, id, enemy);
@@ -216,17 +214,19 @@ public class RLAgent extends Agent {
             System.exit(0);
         }
         saveWeights(weights);
+
         if (myFootmen.size() > enemyFootmen.size()){
             System.out.println("VICTORY!");
         } else {
             System.out.println("DEFEAT");
         }
+
     }
 
     private void decideToLearn(){
         if (!frozen && learningEdpisodes < 10){
             episodeNumber++;
-            System.out.println(episodeNumber);
+            //System.out.println(episodeNumber);
             learningEdpisodes++;
         } else if (!frozen) {
             frozen = true;
@@ -247,6 +247,7 @@ public class RLAgent extends Agent {
             testingEdpisodes = 0;
             averageRewards.add(averageReward / 5.0);
             printTestData(averageRewards);
+            saveToCsv(averageRewards);
             averageReward = 0.0;
         }
     }
@@ -262,7 +263,8 @@ public class RLAgent extends Agent {
      * @return The updated weight vector.
      */
     public double[] updateWeights(Double[] oldWeights, double[] oldFeatures,
-                                  double totalReward, State.StateView stateView, History.HistoryView historyView, int footmanId) {
+                                  double totalReward, State.StateView stateView,
+                                  History.HistoryView historyView, int footmanId) {
         double[] newWeights = new double[oldWeights.length];
         for (int i = 0; i < newWeights.length; i++) {
             double q = 0.0;
@@ -301,19 +303,9 @@ public class RLAgent extends Agent {
             return -1;
 
         if (stateView.getTurnNumber() == 0)
-            return enemyFootmen.get((int) random.nextDouble() * enemyFootmen.size());  //TODO used to just typecast rand to int
+            return enemyFootmen.get((int) random.nextDouble() * enemyFootmen.size());
 
         Integer defenderId = enemyFootmen.get(0);
-
-        if (frozen && random.nextDouble() < epsilon) {
-            for (int i = 0; i < enemyFootmen.size(); i++) {
-                Integer tempDefenderId = enemyFootmen.get(i);
-                double tempTotalQ = calcQValue(stateView, historyView, attackerId, defenderId);
-                if (tempTotalQ > totalQ)
-                    defenderId = tempDefenderId;
-            }
-            return defenderId;
-        } else
 
         for (int i = 0; i < enemyFootmen.size(); i++) {
             Integer tempDefenderId = enemyFootmen.get(i);
@@ -454,7 +446,7 @@ public class RLAgent extends Agent {
                 attacker.getXPosition(), attacker.getYPosition(),
                 defender.getXPosition(), defender.getYPosition()));
 
-        featureVector[2] = defender.getHP() > 0.0 ? /*TODO (double)*/ attacker.getHP() / defender.getHP() : 1;  //TODO look into HPf-HPe instead of quotient
+        featureVector[2] = defender.getHP() > 0.0 ? attacker.getHP() / defender.getHP() : 1;
 
         Map<Integer, ActionResult> actionResults = historyView
                 .getCommandFeedback(playernum, stateView.getTurnNumber() - 1);
@@ -475,27 +467,18 @@ public class RLAgent extends Agent {
             if (((TargetedAction) ar.getAction()).getTargetId() == defenderId)
                 numAttackers++;
         }
-        featureVector[4] = numAttackers > 0.0 ? 1.0 / numAttackers : 1;  //TODO look into different computation
+        featureVector[4] = numAttackers > 0.0 ? 1.0 / numAttackers : 1;
 
         return featureVector;
     }
 
 
-    private boolean significantEvent(State.StateView stateView, History.HistoryView historyView) {
-
+    private boolean checkForEvent(State.StateView stateView, History.HistoryView historyView) {
         int lastTurnNumber = stateView.getTurnNumber() - 1;
-        if (lastTurnNumber < 0.0) {
-            return true;
-        }
-        if (historyView.getDeathLogs(lastTurnNumber).size() > 0.0) {
-
-            return true;
-        }
+        if (lastTurnNumber < 0.0) return true;
+        if (historyView.getDeathLogs(lastTurnNumber).size() > 0.0) return true;
         for (DamageLog damageLog : historyView.getDamageLogs(lastTurnNumber)) {
-            if (myFootmen.contains(damageLog.getDefenderID())) {
-
-                return true;
-            }
+            if (myFootmen.contains(damageLog.getDefenderID())) return true;
         }
         Map<Integer, ActionResult> actionResults = historyView.getCommandFeedback(playernum, lastTurnNumber);
         for (ActionResult ar : actionResults.values()) {
@@ -530,6 +513,20 @@ public class RLAgent extends Agent {
             System.out.println(gamesPlayed + spaceBuffer.toString() + averageReward);
         }
         System.out.println("");
+    }
+
+    private void saveToCsv(List<Double> averageRewards){
+        File path = new File("outputs/rewards.csv");
+        path.getAbsoluteFile().getParentFile().mkdirs();
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(path))){
+            for (int i = 0; i < averageRewards.size(); i++) {
+                String gamesplayed = Integer.toString(10 * i);
+                String averagereward = String.format("%.2f", averageRewards.get(i));
+                bw.write(String.format("%s,%s\n", gamesplayed, averagereward));
+            }
+        } catch (Exception e){
+            e.printStackTrace();
+        }
     }
 
     /**
