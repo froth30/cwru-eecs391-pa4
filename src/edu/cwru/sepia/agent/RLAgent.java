@@ -29,6 +29,7 @@ public class RLAgent extends Agent {
      */
     private List<Integer> myFootmen;
     private List<Integer> enemyFootmen;
+    private List<Integer> deadEnemyFootmen;
 
     /**
      * Convenience variable specifying enemy agent number. Use this whenever referring
@@ -114,6 +115,7 @@ public class RLAgent extends Agent {
 
         // Find all of the enemy units
         enemyFootmen = new LinkedList<>();
+        deadEnemyFootmen = new LinkedList<>();  //TODO consider using an ArrayList
         for (Integer unitId : stateView.getUnitIds(ENEMY_PLAYERNUM)) {
             Unit.UnitView unit = stateView.getUnit(unitId);
 
@@ -224,7 +226,34 @@ public class RLAgent extends Agent {
      * @return The enemy footman ID this unit should attack
      */
     public int selectAction(State.StateView stateView, History.HistoryView historyView, int attackerId) {
-        return -1;
+
+        if (enemyFootmen.size() == 0)
+            return -1;
+
+        if (stateView.getTurnNumber() == 0)
+            return enemyFootmen.get((int) (random.nextDouble() * enemyFootmen.size()));  //TODO used to just typecast rand to int
+
+        int defenderId = enemyFootmen.get(0);
+
+        if (shouldFreeze && random.nextDouble() < epsilon) {
+            for (int i = 0; i < enemyFootmen.size(); i++) {
+                int tempDefenderId = enemyFootmen.get(i);
+                double tempTotalQ = calcQValue(stateView, historyView, attackerId, defenderId);
+                if (tempTotalQ > totalQ)
+                    defenderId = tempDefenderId;
+            }
+            return defenderId;
+        }
+
+        for (int i = 0; i < enemyFootmen.size(); i++) {
+            int tempDefenderId = enemyFootmen.get(i);
+            double tempTotalQ = calcQValue(stateView, historyView, attackerId, defenderId);
+            if (tempTotalQ > totalQ) {
+                totalQ = tempTotalQ;
+                defenderId = tempDefenderId;
+            }
+        }
+        return defenderId;
     }
 
     /**
@@ -261,7 +290,38 @@ public class RLAgent extends Agent {
      * @return The current reward
      */
     public double calculateReward(State.StateView stateView, History.HistoryView historyView, int footmanId) {
-        return 0;
+
+        double reward = 0;
+        int previousTurnNumber = stateView.getTurnNumber() - 1;
+
+        if (previousTurnNumber == -1)
+            return reward;
+
+        for (DamageLog damageLog : historyView.getDamageLogs(previousTurnNumber)) {
+            if (damageLog.getAttackerID() == footmanId)
+                reward += damageLog.getDamage();
+            else if (damageLog.getDefenderID() == footmanId)  //TODO used to be getDefenderController()
+                reward -= damageLog.getDamage();
+        }
+
+        for (DeathLog deathLog : historyView.getDeathLogs(previousTurnNumber)) {
+            int deadFootmanId = deathLog.getDeadUnitID();
+            if (deathLog.getController() == ENEMY_PLAYERNUM) {
+                for (ActionResult ar : historyView.getCommandFeedback(playernum, previousTurnNumber).values()) {
+                    if (ar.getAction().getUnitId() == footmanId &&
+                            ((TargetedAction) ar.getAction()).getTargetId() == deadFootmanId &&
+                            !deadEnemyFootmen.contains(deadFootmanId)) {
+                        deadEnemyFootmen.add(deadFootmanId);
+                        reward += 100;
+                    }
+                }
+            } else reward -= (footmanId == deadFootmanId) ? 100 : 0;
+        }
+
+        if (historyView.getCommandsIssued(playernum, previousTurnNumber).containsKey(footmanId))
+            reward -= 0.1;
+
+        return reward;
     }
 
     private void calculateRewards(State.StateView stateView, History.HistoryView historyView){
@@ -351,22 +411,28 @@ public class RLAgent extends Agent {
         return featureVector;
     }
 
+    /**
+     * Determine whether a significant event happened during the previous turn and return its type.
+     * @param previousTurnNumber The previous turn number
+     * @param historyView History of the game up until this turn
+     * @return The enumerated type of the event that happened
+     */
     private EventType eventHappened(int previousTurnNumber, History.HistoryView historyView){
         final EventType[] event = {EventType.NO_EVENT};
-        if (previousTurnNumber >= 0){
+        if (previousTurnNumber >= 0) {
             event[0] = EventType.FIRST_TURN;
         }
-        for (DamageLog damageLog : historyView.getDamageLogs(previousTurnNumber)){
+        for (DamageLog damageLog : historyView.getDamageLogs(previousTurnNumber)) {
             myFootmen.stream()
                     .filter(id -> id == damageLog.getDefenderID())
                     .forEach(id -> event[0] = EventType.FOOTMAN_HIT);
         }
-        for (DeathLog deathLog : historyView.getDeathLogs(previousTurnNumber)){
+        for (DeathLog deathLog : historyView.getDeathLogs(previousTurnNumber)) {
             myFootmen.stream()
                     .filter(id -> deathLog.getDeadUnitID() == id)
                     .forEach(id -> event[0] = EventType.FOOTMAN_DIED);
         }
-        for (ActionResult result : historyView.getCommandFeedback(playernum, previousTurnNumber).values()){
+        for (ActionResult result : historyView.getCommandFeedback(playernum, previousTurnNumber).values()) {
             myFootmen.stream()
                     .filter(id -> result.getAction().getUnitId() == id &&
                             result.getFeedback().toString().equals("INCOMPLETE"))

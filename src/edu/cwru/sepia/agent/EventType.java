@@ -1,14 +1,14 @@
 package edu.cwru.sepia.agent;
 
 /**
- * Created by nathaniel on 4/23/16.
+ * This enumeration represents a type of event that can happen during gameplay.
  */
 public enum EventType {
 
-    FOOTMAN_DIED,
-    FOOTMAN_HIT,
-    ACTION_COMPLETED,
     FIRST_TURN,
+    ACTION_COMPLETED,
+    FOOTMAN_HIT,
+    FOOTMAN_DIED,
     NO_EVENT
 
 }
