@@ -230,7 +230,7 @@ public class RLAgent extends Agent {
             for (Double reward : rewards.values()){
                 totalReward += reward;
             }
-            testingReward += (totalReward / rewards.size());
+            testingReward += (totalReward /= rewards.size());
         } else  if (shouldFreeze){
             shouldFreeze = false;
             testingEdpisodes = 0;
@@ -474,7 +474,7 @@ public class RLAgent extends Agent {
     private boolean significantEvent(State.StateView stateView, History.HistoryView historyView) {
 
         int lastTurnNumber = stateView.getTurnNumber() - 1;
-        if (lastTurnNumber < 0) { -
+        if (lastTurnNumber < 0) {
             return true;
         }
         if (historyView.getDeathLogs(lastTurnNumber).size() > 0) {
