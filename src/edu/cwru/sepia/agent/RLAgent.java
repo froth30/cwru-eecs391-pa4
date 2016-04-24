@@ -30,8 +30,8 @@ public class RLAgent extends Agent {
     private List<Integer> enemyFootmen;
     private boolean frozen = false;
     private double totalQ = 0.0;
-    private int learningEdpisodes = 0;
-    private int testingEdpisodes = 0;
+    private int learningEpisodes = 0;
+    private int testingEpisodes = 0;
     private double averageReward;
     private List<Double> averageRewards;
     private int episodeNumber;
@@ -112,8 +112,8 @@ public class RLAgent extends Agent {
         decideToLearn();
         decideToTest();
 
-        intializeFootmen(stateView, myFootmen, playernum);
-        intializeFootmen(stateView, enemyFootmen, ENEMY_PLAYERNUM);
+        initializeFootmen(stateView, myFootmen, playernum);
+        initializeFootmen(stateView, enemyFootmen, ENEMY_PLAYERNUM);
 
         for (Integer footman : myFootmen){
             rewards.put(footman, 0.0);
@@ -122,7 +122,13 @@ public class RLAgent extends Agent {
         return middleStep(stateView, historyView);
     }
 
-    private void intializeFootmen(State.StateView state, List<Integer> footmen, int player){
+    /**
+     * Initialize list of footmen for each player.
+     * @param state Current state of the SEPIA game
+     * @param footmen List of footmen
+     * @param player Player agent number
+     */
+    private void initializeFootmen(State.StateView state, List<Integer> footmen, int player) {
         for (Integer unitId : state.getUnitIds(player)) {
             Unit.UnitView unit = state.getUnit(unitId);
 
@@ -220,23 +226,22 @@ public class RLAgent extends Agent {
         } else {
             System.out.println("DEFEAT");
         }
-
     }
 
     private void decideToLearn(){
-        if (!frozen && learningEdpisodes < 10){
+        if (!frozen && learningEpisodes < 10){
             episodeNumber++;
-            //System.out.println(episodeNumber);
-            learningEdpisodes++;
+            System.out.println(episodeNumber);
+            learningEpisodes++;
         } else if (!frozen) {
             frozen = true;
-            learningEdpisodes = 0;
+            learningEpisodes = 0;
         }
     }
 
     private void decideToTest(){
-        if (frozen && testingEdpisodes < 5) {
-            testingEdpisodes++;
+        if (frozen && testingEpisodes < 5) {
+            testingEpisodes++;
             double totalReward = 0.0;
             for (Double reward : rewards.values()){
                 totalReward += reward;
@@ -244,7 +249,7 @@ public class RLAgent extends Agent {
             averageReward += (totalReward / rewards.size());
         } else  if (frozen){
             frozen = false;
-            testingEdpisodes = 0;
+            testingEpisodes = 0;
             averageRewards.add(averageReward / 5.0);
             printTestData(averageRewards);
             saveToCsv(averageRewards);
