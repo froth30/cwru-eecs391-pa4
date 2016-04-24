@@ -1,17 +1,17 @@
 package edu.cwru.sepia.agent;
 
-import edu.cwru.sepia.action.Action;
-import edu.cwru.sepia.action.ActionFeedback;
-import edu.cwru.sepia.action.ActionResult;
-import edu.cwru.sepia.action.TargetedAction;
+import edu.cwru.sepia.action.*;
 import edu.cwru.sepia.environment.model.history.DamageLog;
 import edu.cwru.sepia.environment.model.history.DeathLog;
 import edu.cwru.sepia.environment.model.history.History;
 import edu.cwru.sepia.environment.model.state.State;
 import edu.cwru.sepia.environment.model.state.Unit;
+import edu.cwru.sepia.util.DistanceMetrics;
 
 import java.io.*;
 import java.util.*;
+
+import static edu.cwru.sepia.util.DistanceMetrics.chebyshevDistance;
 
 public class RLAgent extends Agent {
 
@@ -249,10 +249,7 @@ public class RLAgent extends Agent {
      * @param defenderId An enemy footman that your footman would be attacking
      * @return The approximate Q-value
      */
-    public double calcQValue(State.StateView stateView,
-                             History.HistoryView historyView,
-                             int attackerId,
-                             int defenderId) {
+    public double calcQValue(State.StateView stateView, History.HistoryView historyView, int attackerId, int defenderId) {
         return 0;
     }
 
@@ -273,11 +270,44 @@ public class RLAgent extends Agent {
      * @param defenderId An enemy footman. The one you are considering attacking.
      * @return The array of feature function outputs.
      */
-    public double[] calculateFeatureVector(State.StateView stateView,
-                                           History.HistoryView historyView,
-                                           int attackerId,
-                                           int defenderId) {
-        return null;
+    public double[] calculateFeatureVector(State.StateView stateView, History.HistoryView historyView, int attackerId, int defenderId) {
+
+        double[] featureVector = new double[NUM_FEATURES];       // instantiate feature vector
+        Unit.UnitView attacker = stateView.getUnit(attackerId);  // get attacker unit view
+        Unit.UnitView defender = stateView.getUnit(defenderId);  // get defender unit view
+
+        if (attacker == null || defender == null)
+            return featureVector;
+
+        featureVector[0] = 0.5;  // initialize first feature to constant
+
+        featureVector[1] = 100.0 / chebyshevDistance(  //TODO look into implementing 1/D^2 instead, different scalar
+                attacker.getXPosition(), attacker.getYPosition(),
+                defender.getXPosition(), defender.getYPosition());
+
+        featureVector[2] = defender.getHP() > 0 ? /*TODO (double)*/ attacker.getHP() / defender.getHP() : 1;  //TODO look into HPf-HPe instead of quotient
+
+        Map<Integer, ActionResult> actionResultMap = historyView  //TODO rename as "actionResults"?
+                .getCommandFeedback(playernum, stateView.getTurnNumber() - 1);
+
+        if (actionResultMap == null)
+            return featureVector;
+
+        featureVector[3] = 1;  // initialize fourth feature to default value
+        if (actionResultMap.containsKey(defenderId)) {  //TODO are attacker and defender supposed to be swapped?
+            TargetedAction targetedAction = (TargetedAction) actionResultMap.get(defenderId).getAction();  //TODO change to Attack object?
+            if (targetedAction != null && targetedAction.getTargetId() == attackerId)
+                featureVector[3] = 100;
+        }
+
+        int numAttackers = 0;
+        for (ActionResult ar : actionResultMap.values()) {
+            if (((TargetedAction) ar.getAction()).getTargetId() == defenderId)
+                numAttackers++;
+        }
+        featureVector[4] = numAttackers > 0 ? 1.0 / numAttackers : 1;  //TODO look into different computation
+
+        return featureVector;
     }
 
     /**
