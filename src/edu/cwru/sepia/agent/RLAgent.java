@@ -169,40 +169,50 @@ public class RLAgent extends Agent {
      */
     @Override
     public Map<Integer, Action> middleStep(State.StateView stateView, History.HistoryView historyView) {
+
         Map<Integer, Action> actions = new HashMap<>();
+
+        if (stateView.getTurnNumber() > 0)
+            removeDeadFootmen(stateView, historyView);
+
         calculateRewards(stateView, historyView);
-        if (checkForEvent(stateView, historyView)){
-            for (Integer id : myFootmen){
-                Integer enemy = selectAction(stateView, historyView, id);
-                if (!frozen) calcNewWeights(stateView, historyView, id, enemy);
-                actions.put(id, Action.createCompoundAttack(id, enemy));
+        if (checkForEvent(stateView, historyView)) {
+            for (Integer friendlyFootmanId : myFootmen) {
+                Integer enemyFootmanId = selectAction(stateView, historyView, friendlyFootmanId);
+                if (!frozen) calcNewWeights(stateView, historyView, friendlyFootmanId, enemyFootmanId);
+                actions.put(friendlyFootmanId, Action.createCompoundAttack(friendlyFootmanId, enemyFootmanId));
             }
         }
-        if (stateView.getTurnNumber() > 0.0) removeDeadUnits(stateView, historyView);
         return actions;
     }
 
-    private void removeDeadUnits(State.StateView stateView, History.HistoryView historyView){
-        for (DeathLog deathLog : historyView.getDeathLogs(stateView.getTurnNumber() - 1)){
-            Integer owner = deathLog.getController();
-            Integer deadUnit = deathLog.getDeadUnitID();
-            if (owner == playernum && myFootmen.contains(deadUnit)){
-                myFootmen.remove(deadUnit);
-            } else if (owner == ENEMY_PLAYERNUM && enemyFootmen.contains(deadUnit)){
-                enemyFootmen.remove(deadUnit);
-            }
+    /**
+     * Remove all dead footmen from their controlling agent's list of footmen.
+     * @param stateView Current state of the game
+     * @param historyView History of the game up to this point
+     */
+    private void removeDeadFootmen(State.StateView stateView, History.HistoryView historyView){
+        for (DeathLog deathLog : historyView.getDeathLogs(stateView.getTurnNumber())) {
+            Integer controller = deathLog.getController();
+            Integer deadUnitID = deathLog.getDeadUnitID();
+            if (controller == playernum && myFootmen.contains(deadUnitID))
+                myFootmen.remove(deadUnitID);
+            else if (controller == ENEMY_PLAYERNUM && enemyFootmen.contains(deadUnitID))
+                enemyFootmen.remove(deadUnitID);
+            else
+                System.err.println("Unknown unit killed: " + stateView.getUnit(deadUnitID).getTemplateView().getName());
         }
     }
 
-    private void calcNewWeights(State.StateView stateView, History.HistoryView historyView, int id, int enemy) {
+    private void calcNewWeights(State.StateView stateView, History.HistoryView historyView, int friendlyFootmanId, int enemyFootmanId) {
         updateWeights(weights, calculateFeatureVector(
                         stateView,
                         historyView,
-                        id,
-                        enemy), rewards.get(id),
+                        friendlyFootmanId,
+                        enemyFootmanId), rewards.get(friendlyFootmanId),
                 stateView,
                 historyView,
-                id);
+                friendlyFootmanId);
     }
 
     /**
@@ -214,7 +224,7 @@ public class RLAgent extends Agent {
     @Override
     public void terminalStep(State.StateView stateView, History.HistoryView historyView) {
         calculateRewards(stateView, historyView);
-        removeDeadUnits(stateView, historyView);
+        removeDeadFootmen(stateView, historyView);
         if (episodeNumber > numEpisodes){
             System.out.println("ALL DONE");
             System.exit(0);
@@ -228,32 +238,35 @@ public class RLAgent extends Agent {
         }
     }
 
-    private void decideToLearn(){
-        if (!frozen && learningEpisodes < 10){
+    private void decideToLearn() {
+        if (frozen) return;
+
+        if (learningEpisodes < 10) {
             episodeNumber++;
             System.out.println(episodeNumber);
             learningEpisodes++;
-        } else if (!frozen) {
+        } else {
             frozen = true;
             learningEpisodes = 0;
         }
     }
 
-    private void decideToTest(){
-        if (frozen && testingEpisodes < 5) {
+    private void decideToTest() {
+        if (!frozen)return;
+
+        if (testingEpisodes < 5) {
             testingEpisodes++;
-            double totalReward = 0.0;
-            for (Double reward : rewards.values()){
+            double totalReward = 0;
+            for (Double reward : rewards.values())
                 totalReward += reward;
-            }
             averageReward += (totalReward / rewards.size());
-        } else  if (frozen){
+        } else {
             frozen = false;
             testingEpisodes = 0;
-            averageRewards.add(averageReward / 5.0);
+            averageRewards.add(averageReward / 5);
             printTestData(averageRewards);
             saveToCsv(averageRewards);
-            averageReward = 0.0;
+            averageReward = 0;
         }
     }
 
