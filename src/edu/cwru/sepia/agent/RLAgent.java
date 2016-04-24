@@ -161,22 +161,14 @@ public class RLAgent extends Agent {
     public Map<Integer, Action> middleStep(State.StateView stateView, History.HistoryView historyView) {
         Map<Integer, Action> actions = new HashMap<>();
         calculateRewards(stateView, historyView);
-        for (EventType type : EventType.values()) {
-            for (Integer id : myFootmen) {
-                switch (type) {
-                    case NO_EVENT:
-                        //do nothing
-                        break;
-                    default:
-                        if (!shouldFreeze) {
-                            int enemy = selectAction(stateView, historyView, id);
-                            calcNewWeights(stateView, historyView, id, enemy);
-                            actions.put(id, Action.createCompoundAttack(id, enemy));
-                        }
-                }
+        if (significantEvent(stateView, historyView)){
+            for (Integer id : myFootmen){
+                int enemy = selectAction(stateView, historyView, id);
+                if (!shouldFreeze) calcNewWeights(stateView, historyView, id, enemy);
+                actions.put(id, Action.createCompoundAttack(id, enemy));
             }
         }
-        removeDeadUnits(stateView, historyView);
+        if (stateView.getTurnNumber() > 0) removeDeadUnits(stateView, historyView);
         return actions;
     }
 
@@ -193,17 +185,14 @@ public class RLAgent extends Agent {
     }
 
     private void calcNewWeights(State.StateView stateView, History.HistoryView historyView, int id, int enemy) {
-            updateWeights(
-                    weights,
-                    calculateFeatureVector(
-                            stateView,
-                            historyView,
-                            id,
-                            enemy),
-                    rewards.get(id),
-                    stateView,
-                    historyView,
-                    id);
+        updateWeights(weights, calculateFeatureVector(
+                        stateView,
+                        historyView,
+                        id,
+                        enemy), rewards.get(id),
+                stateView,
+                historyView,
+                id);
     }
 
     /**
@@ -269,9 +258,11 @@ public class RLAgent extends Agent {
             for (int j = 0; j < oldFeatures.length; j++) {
                 q += oldWeights[j] * oldFeatures[j];
             }
-            for (Integer id : enemyFootmen){
-                double totalQ = calcQValue(stateView, historyView, footmanId, id);
-                if (totalQ > this.totalQ) this.totalQ = totalQ;
+            if (!shouldFreeze) {
+                for (Integer id : enemyFootmen) {
+                    double totalQ = calcQValue(stateView, historyView, footmanId, id);
+                    if (totalQ > this.totalQ) this.totalQ = totalQ;
+                }
             }
             newWeights[i] = getNextWeight(totalReward, q, oldFeatures[i]);
         }
@@ -419,7 +410,7 @@ public class RLAgent extends Agent {
         for (int i = 0; i < features.length; i++) {
             q += features[i] * weights[i];
         }
-        return q;
+        return q + weights[0];
     }
 
     /**
@@ -479,35 +470,32 @@ public class RLAgent extends Agent {
         return featureVector;
     }
 
-    /**
-     * Determine whether a significant event happened during the previous turn and return its type.
-     * @param previousTurnNumber The previous turn number
-     * @param historyView History of the game up until this turn
-     * @return The enumerated type of the event that happened
-     */
-    private EventType eventHappened(int previousTurnNumber, History.HistoryView historyView){
-        final EventType[] event = {EventType.NO_EVENT};
-        if (previousTurnNumber >= 0) {
-            event[0] = EventType.FIRST_TURN;
+
+    private boolean significantEvent(State.StateView stateView, History.HistoryView historyView) {
+
+        int lastTurnNumber = stateView.getTurnNumber() - 1;
+        if (lastTurnNumber < 0) { -
+            return true;
         }
-        for (DamageLog damageLog : historyView.getDamageLogs(previousTurnNumber)) {
-            myFootmen.stream()
-                    .filter(id -> id == damageLog.getDefenderID())
-                    .forEach(id -> event[0] = EventType.FOOTMAN_HIT);
+        if (historyView.getDeathLogs(lastTurnNumber).size() > 0) {
+
+            return true;
         }
-        for (DeathLog deathLog : historyView.getDeathLogs(previousTurnNumber)) {
-            myFootmen.stream()
-                    .filter(id -> deathLog.getDeadUnitID() == id)
-                    .forEach(id -> event[0] = EventType.FOOTMAN_DIED);
+        for (DamageLog damageLog : historyView.getDamageLogs(lastTurnNumber)) {
+            if (myFootmen.contains(damageLog.getDefenderID())) {
+
+                return true;
+            }
         }
-        for (ActionResult result : historyView.getCommandFeedback(playernum, previousTurnNumber).values()) {
-            myFootmen.stream()
-                    .filter(id -> result.getAction().getUnitId() == id &&
-                            result.getFeedback().toString().equals("INCOMPLETE"))
-                    .forEach(id -> event[0] = EventType.ACTION_COMPLETED);
+        Map<Integer, ActionResult> actionResults = historyView.getCommandFeedback(playernum, lastTurnNumber);
+        for (ActionResult ar : actionResults.values()) {
+            if (myFootmen.contains(ar.getAction().getUnitId()) && ar.getFeedback().toString().equals("INCOMPLETE")) {
+                return true;
+            }
         }
-        return event[0];
+        return false;
     }
+
 
     /**
      * DO NOT CHANGE THIS!
