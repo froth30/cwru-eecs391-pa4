@@ -241,7 +241,7 @@ public class RLAgent extends Agent {
     }
 
     /**
-     * Calculate the updated weights for this agent. 
+     * Calculate the updated weights for this agent.
      * @param oldWeights Weights prior to update
      * @param oldFeatures Features from (s,a)
      * @param totalReward Cumulative discounted reward for this footman.
@@ -250,7 +250,7 @@ public class RLAgent extends Agent {
      * @param footmanId The footman we are updating the weights for
      * @return The updated weight vector.
      */
-    public double[] updateWeights(Double[] oldWeights, double[] oldFeatures, 
+    public double[] updateWeights(Double[] oldWeights, double[] oldFeatures,
                                   double totalReward, State.StateView stateView, History.HistoryView historyView, int footmanId) {
         double[] newWeights = new double[oldWeights.length];
         for (int i = 0; i < newWeights.length; i++) {
