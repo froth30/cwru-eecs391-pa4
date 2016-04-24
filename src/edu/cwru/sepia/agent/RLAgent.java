@@ -286,11 +286,11 @@ public class RLAgent extends Agent {
      */
     public int selectAction(State.StateView stateView, History.HistoryView historyView, int attackerId) {
 
-        if (enemyFootmen.size() == 0)
+        if (enemyFootmen.isEmpty())
             return -1;
 
         if (stateView.getTurnNumber() == 0)
-            return enemyFootmen.get((int) (random.nextDouble() * enemyFootmen.size()));  //TODO used to just typecast rand to int
+            return enemyFootmen.get((int) random.nextDouble() * enemyFootmen.size());  //TODO used to just typecast rand to int
 
         int defenderId = enemyFootmen.get(0);
 
@@ -359,7 +359,7 @@ public class RLAgent extends Agent {
         for (DamageLog damageLog : historyView.getDamageLogs(previousTurnNumber)) {
             if (damageLog.getAttackerID() == footmanId)
                 reward += damageLog.getDamage();
-            else if (damageLog.getDefenderID() == footmanId)  //TODO used to be getDefenderController()
+            else if (damageLog.getDefenderController() == footmanId)  //TODO used to be getDefenderController()
                 reward -= damageLog.getDamage();
         }
 
@@ -441,9 +441,9 @@ public class RLAgent extends Agent {
 
         featureVector[0] = 0.5;  // initialize first feature to constant
 
-        featureVector[1] = 100.0 / chebyshevDistance(  //TODO look into implementing 1/D^2 instead, different scalar
+        featureVector[1] = 100 * (1 / chebyshevDistance(
                 attacker.getXPosition(), attacker.getYPosition(),
-                defender.getXPosition(), defender.getYPosition());
+                defender.getXPosition(), defender.getYPosition()));
 
         featureVector[2] = defender.getHP() > 0 ? /*TODO (double)*/ attacker.getHP() / defender.getHP() : 1;  //TODO look into HPf-HPe instead of quotient
 
@@ -474,7 +474,7 @@ public class RLAgent extends Agent {
     private boolean significantEvent(State.StateView stateView, History.HistoryView historyView) {
 
         int lastTurnNumber = stateView.getTurnNumber() - 1;
-        if (lastTurnNumber < 0) { -
+        if (lastTurnNumber < 0) {
             return true;
         }
         if (historyView.getDeathLogs(lastTurnNumber).size() > 0) {
