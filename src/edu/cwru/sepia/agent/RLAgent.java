@@ -14,6 +14,9 @@ import java.util.*;
 
 import static edu.cwru.sepia.util.DistanceMetrics.chebyshevDistance;
 
+/**
+ * This class represents a reinforcement learning agent which will learn how to win with enough practice.
+ */
 public class RLAgent extends Agent {
 
     /**
@@ -67,7 +70,11 @@ public class RLAgent extends Agent {
     public final double learningRate = .0001;
     public final double epsilon = .02;
 
-
+    /**
+     * Construct a reinforcement learning agent.
+     * @param playernum Player number of the agent
+     * @param args String arguments
+     */
     public RLAgent(int playernum, String[] args) {
         super(playernum);
         rewards = new HashMap<>();
@@ -339,7 +346,8 @@ public class RLAgent extends Agent {
         if (enemyFootmen.isEmpty())  // target nobody if the enemy agent is defeated
             return -1;
 
-        if (stateView.getTurnNumber() == 0)  // target random enemy on first turn
+        // target random enemy on first turn... or with a probability of epsilon
+        if (stateView.getTurnNumber() == 0  || random.nextDouble() < epsilon)
             return enemyFootmen.get((int) (random.nextDouble() * enemyFootmen.size()));
 
         Integer defenderId = enemyFootmen.get(0);
